@@ -1220,32 +1220,19 @@ void Help(void)
     printf(banner) ;
     printf("\r\n  Debugger Command Summary") ;
     printf(banner) ;
-    printf("\r\n  .(reg)       - Change Registers: e.g A0-A7,D0-D7,PC,SSP,USP,SR");
-    printf("\r\n  BD/BS/BC/BK  - Break Point: Display/Set/Clear/Kill") ;
-    printf("\r\n  C            - Copy Program from Flash to Main Memory") ;
-    printf("\r\n  DI           - Disassemble Program");
-    printf("\r\n  DU           - Dump Memory Contents to Screen") ;
-    printf("\r\n  E            - Enter String into Memory") ;
-    printf("\r\n  F            - Fill Memory with Data") ;
-    printf("\r\n  G            - Go Program Starting at Address: $%08X", PC) ;
-    printf("\r\n  I            - Test I2C controller write") ;
-    printf("\r\n  J            - Test I2C controller read") ;
-    printf("\r\n  K            - Test DAC");
-    printf("\r\n  A            - Test ADC");
-    printf("\r\n  L            - Load Program (.HEX file) from Laptop") ;
-    printf("\r\n  M            - Memory Examine and Change");
-    printf("\r\n  P            - Program Flash Memory with User Program") ;
-    printf("\r\n  R            - Display 68000 Registers") ;
-    printf("\r\n  S            - Toggle ON/OFF Single Step Mode") ;
-    printf("\r\n  TM           - Test Memory") ;
-    printf("\r\n  TS           - Test DE2 Switches: SW0-SW15") ;
-    printf("\r\n  TD           - Test DE2 Displays: LEDs and 7-Segment") ;
-    printf("\r\n  WD/WS/WC/WK  - Watch Point: Display/Set/Clear/Kill") ;
+    printf("\r\n  I            - Test I2C EEPROM single byte write") ;
+    printf("\r\n  J            - Test I2C EEPROM single byte read") ;
+    printf("\r\n  K            - Test I2C EEPROM 128-byte write");
+    printf("\r\n  L            - Test I2C EEPROM any address any size write");
+    printf("\r\n  M            - Test DAC");
+    printf("\r\n  N            - Test ADC");
     printf(banner) ;
 }
 
-void TestI2CWrite(void);
-void TestI2CRead(void);
+void TestI2CEepromWrite(void);
+void TestI2CEepromWrite128(void);
+void TestI2CEepromWriteAny(void);
+void TestI2CEepromRead(void);
 void TestDAC(void);
 void TestADC(void);
 
@@ -1258,120 +1245,18 @@ void menu(void)
         printf("\r\n#") ;
         c = toupper(_getch());
 
-        if( c == (char)('L'))                  // load s record file
-             Load_SRecordFile() ;
-
-        else if( c == (char)('D'))             // dump memory
-            DMenu() ;
-
-        else if( c == (char)('E'))             // Enter String into memory
-            EnterString() ;
-
-        else if( c == (char)('F'))             // fill memory
-            FillMemory() ;
-
-        else if( c == (char)('G'))  {           // go user program
-            printf("\r\nProgram Running.....") ;
-            printf("\r\nPress <RESET> button <Key0> on DE2 to stop") ;
-            GoFlag = 1 ;
-            go() ;
-        }
-
-        else if( c == (char)('I'))
-             TestI2CWrite() ;
-
+        if( c == (char)('I'))
+             TestI2CEepromWrite() ;
         else if( c == (char)('J'))
-             TestI2CRead() ;
-
+             TestI2CEepromRead() ;
         else if( c == (char)('K'))
+             TestI2CEepromWrite128();
+        else if( c == (char)('L'))
+             TestI2CEepromWriteAny();
+        else if( c == (char)('M'))
              TestDAC();
-
-        else if( c == (char)('A'))
+        else if( c == (char)('N'))
              TestADC();
-
-        else if( c == (char)('M'))           // memory examine and modify
-             MemoryChange() ;
-
-        else if( c == (char)('P'))            // Program Flash Chip
-             ProgramFlashChip() ;
-
-        else if( c == (char)('C'))             // copy flash chip to ram and go
-             LoadFromFlashChip();
-
-        else if( c == (char)('R'))             // dump registers
-             DumpRegisters() ;
-
-        else if( c == (char)('.'))           // change registers
-             ChangeRegisters() ;
-
-        else if( c == (char)('B'))              // breakpoint command
-            Breakpoint() ;
-
-        else if( c == (char)('T'))  {          // Test command
-             c1 = toupper(_getch()) ;
-             if(c1 == (char)('M'))                    // memory test
-                MemoryTest() ;
-             else if( c1 == (char)('S'))              // Switch Test command
-                SwitchTest() ;
-             else if( c1 == (char)('D'))              // display Test command
-                TestLEDS() ;
-             else
-                UnknownCommand() ;
-        }
-
-        else if( c == (char)(' ')) {             // Next instruction command
-            DisableBreakPoints() ;
-            if(Trace == 1 && GoFlag == 1)   {    // if the program is running and trace mode on then 'N' is valid
-                TraceException = 1 ;             // generate a trace exception for the next instruction if user wants to single step though next instruction
-                return ;
-            }
-            else
-                printf("\r\nError: Press 'G' first to start program") ;
-        }
-
-        else if( c == (char)('S')) {             // single step
-             if(Trace == 0) {
-                DisableBreakPoints() ;
-                printf("\r\nSingle Step  :[ON]") ;
-                printf("\r\nBreak Points :[Disabled]") ;
-                SR = SR | (unsigned short int)(0x8000) ;    // set T bit in status register
-                printf("\r\nPress 'G' to Trace Program from address $%X.....",PC) ;
-                printf("\r\nPush <RESET Button> to Stop.....") ;
-                DumpRegisters() ;
-
-                Trace = 1;
-                TraceException = 1;
-                x = *(unsigned int *)(0x00000074) ;       // simulate responding to a Level 5 IRQ by reading vector to reset Trace exception generator
-            }
-            else {
-                Trace = 0 ;
-                TraceException = 0 ;
-                x = *(unsigned int *)(0x00000074) ;       // simulate responding to a Level 5 IRQ by reading vector to reset Trace exception generator
-                EnableBreakPoints() ;
-                SR = SR & (unsigned short int)(0x7FFF) ;    // clear T bit in status register
-                printf("\r\nSingle Step : [OFF]") ;
-                printf("\r\nBreak Points :[Enabled]") ;
-                printf("\r\nPress <ESC> to Resume User Program.....") ;
-            }
-        }
-
-        else if(c == (char)(0x1b))  {   // if user choses to end trace and run program
-            Trace = 0;
-            TraceException = 0;
-            x = *(unsigned int *)(0x00000074) ;   // read IRQ 5 vector to reset trace vector generator
-            EnableBreakPoints() ;
-            SR = SR & (unsigned short int)(0x7FFF) ;    // clear T bit in status register
-
-            printf("\r\nSingle Step  :[OFF]") ;
-            printf("\r\nBreak Points :[Enabled]");
-            printf("\r\nProgram Running.....") ;
-            printf("\r\nPress <RESET> button <Key0> on DE2 to stop") ;
-            return ;
-        }
-
-        else if( c == (char)('W'))              // Watchpoint command
-            Watchpoint() ;
-
         else
             UnknownCommand() ;
     }
@@ -1476,7 +1361,7 @@ void EnterString(void)
 void delay(void)
 {
     unsigned int i = 0;
-    while (i < 50000) {
+    while (i < 500) {
         i++;
     }
 }
@@ -1491,7 +1376,14 @@ void I2CInit(void) {
     *RamPtr = 0x80;
 }
 
+void I2CWrite_opt(const unsigned char txdata, const unsigned char command, char silent);
+
 void I2CWrite(const unsigned char txdata, const unsigned char command)
+{
+    I2CWrite_opt(txdata, command, 'N');
+}
+
+void I2CWrite_opt(const unsigned char txdata, const unsigned char command, char silent)
 {
     unsigned char *RamPtr;
     RamPtr = 0x00408006;
@@ -1500,11 +1392,16 @@ void I2CWrite(const unsigned char txdata, const unsigned char command)
     *RamPtr = command;
     if (!(command & 0x08)) {
         while (*RamPtr & 0x80) {}
-        printf("\r\nAck");
     }
+    if (silent == 'N')
+        printf("\r\nWrote %02x using command %02x", txdata, command);
+    else
+        delay();
 }
 
-unsigned char I2CRead()
+unsigned char I2CRead(void);
+
+unsigned char I2CRead(void)
 {
     unsigned char *RamPtr;
     RamPtr = 0x00408006;
@@ -1513,7 +1410,10 @@ unsigned char I2CRead()
 
 void I2CEepromWrite(unsigned char address_hi, unsigned char address_lo, const unsigned char data)
 {
-    I2CWrite(0xA0,0x90);
+    if (address_hi & 0x80)
+        I2CWrite(0xA8,0x90);
+    else
+        I2CWrite(0xA0,0x90);
     I2CWrite(address_hi,0x10);
     I2CWrite(address_lo,0x10);
     I2CWrite(data,0x50);
@@ -1522,63 +1422,156 @@ void I2CEepromWrite(unsigned char address_hi, unsigned char address_lo, const un
 void I2CEepromRead(unsigned char address_hi, unsigned char address_lo)
 {
     int i = 0;
-    I2CWrite(0xA0,0x90);
+    unsigned char i2c;
+    if (address_hi & 0x80)
+        i2c = 0xA8;
+    else
+        i2c = 0xA0;
+    I2CWrite(i2c,0x90);
     I2CWrite(address_hi,0x10);
     I2CWrite(address_lo,0x50);
-    I2CWrite(0xA1,0x90);
-    I2CWrite(0xA0,0x68);
-    delay();
-    printf("\r\n%02x",I2CRead());
-}
-
-void I2CDACWrite(unsigned char value)
-{
-    unsigned char control_byte = 0x40;
-    I2CInit();
-    I2CWrite(0x90,0x90);
-    I2CWrite(control_byte,0x10);
-    I2CWrite(value,0x50);
-}
-
-void I2CADCRead(void)
-{
-    unsigned char control_byte = 0x40;
-    I2CInit();
-    I2CWrite(0x90,0x90);
-    I2CWrite(control_byte,0x50);
-    I2CWrite(0x91,0x90);
-    I2CWrite(0x90,0x68);
-    delay();
-    printf("\r\n%d",I2CRead());
+    I2CWrite(i2c | 1,0x90);
+    I2CWrite(i2c,0x68);
+    while (++i < 10)
+        delay();
+    printf("\r\nRead value %02x",I2CRead());
 }
 
 void TestDAC(void)
 {
     unsigned int i = 0;
-    printf("\r\nTesting DAC read");
+    unsigned char control_byte = 0x40;
+    printf("\r\nTesting DAC write");
+    I2CInit();
+    I2CWrite(0x90, 0x90);
+    I2CWrite(control_byte, 0x10);
     while (++i < 4096) {
-        I2CDACWrite(i % 255);
+        I2CWrite(i % 255, 0x10);
     }
+    I2CWrite(i % 255, 0x50);
 }
 
 void TestADC(void)
 {
+    unsigned char control_byte = 0x40;
     printf("\r\nTesting ADC read");
-    I2CADCRead();
+    I2CInit();
+    I2CWrite(0x90, 0x90);
+    I2CWrite(control_byte, 0x50);
+    I2CWrite(0x91, 0x90);
+    I2CWrite(0x90, 0x68);
+    delay();
+    printf("\r\nRead value %d",I2CRead());
 }
 
-void TestI2CWrite(void)
+void TestI2CEepromWrite(void)
 {
-    printf("\r\nTesting I2C write");
+    unsigned short address;
+    unsigned char value;
+    printf("\r\nTesting I2C EEPROM write");
+    printf("\r\nEnter 16-bit address to write to: 0x");
+    address = (unsigned short)Get4HexDigits(0);
+    printf("\r\nEnter 8-bit value to write: 0x");
+    value = (unsigned char)Get2HexDigits(0);
     I2CInit();
-    I2CEepromWrite(0xAA,0xAA,0x88);
+    I2CEepromWrite(address / 0x100, address & 0xFF, value);
 }
 
-void TestI2CRead(void)
+void TestI2CEepromRead(void)
 {
-    printf("\r\nTesting I2C read");
+    unsigned short address;
+    printf("\r\nTesting I2C EEPROM read");
+    printf("\r\nEnter 16-bit address to read from: 0x");
+    address = (unsigned short)Get4HexDigits(0);
     I2CInit();
-    I2CEepromRead(0xAA,0xAA);
+    I2CEepromRead(address / 0x100, address & 0xFF);
+}
+
+void EepromWriteChunk(unsigned char address_hi, unsigned char start_address_lo, unsigned char end_address_lo, unsigned char data, char silent);
+
+void TestI2CEepromWriteAny()
+{
+    unsigned short start;
+    unsigned short end;
+    unsigned char data;
+    unsigned char address_lo;
+    unsigned char address_hi;
+    unsigned char start_address_lo;
+    unsigned char start_address_hi;
+    unsigned char end_address_lo;
+    unsigned char end_address_hi;
+    I2CInit();
+    printf("\r\nEnter 16-bit start address: 0x");
+    start = (unsigned short)Get4HexDigits(0);
+    printf("\r\nEnter 16-bit end address: 0x");
+    end = (unsigned short)Get4HexDigits(0);
+    printf("\r\nEnter byte to fill range with: 0x");
+    data = (unsigned char)Get2HexDigits(0);
+    if (start > end) {
+        printf("\r\nERR start is greater than end range");
+        return;
+    }
+    start_address_lo = start & 0xFF;
+    start_address_hi = start / 0x100;
+    end_address_lo = end & 0xFF;
+    end_address_hi = end / 0x100;
+
+    address_lo = start_address_lo;
+    address_hi = start_address_hi;
+
+    if (start_address_hi - end_address_hi == 0) {
+        printf("\r\nWriting within a single chunk");
+        EepromWriteChunk(address_hi, start_address_lo, end_address_lo, data, 'N');
+    } else {
+        printf("\r\nWriting to multiple chunks");
+        EepromWriteChunk(address_hi, start_address_lo, 0xFF, data, 'Y');
+        address_hi++;
+        while (address_hi < end_address_hi) {
+            EepromWriteChunk(address_hi, 0x00, 0xFF, data, 'Y');
+            address_hi++;
+        }
+        EepromWriteChunk(address_hi, 0x00, end_address_lo, data, 'Y');
+    }
+    printf("\r\nAnywhere write complete");
+}
+
+void EepromWriteChunk(unsigned char address_hi, unsigned char start_address_lo, unsigned char end_address_lo, unsigned char data, char silent)
+{
+    unsigned char address_lo;
+    unsigned short start;
+    unsigned short end;
+    address_lo = start_address_lo;
+    if (start_address_lo < 128 && end_address_lo > 127) {
+        EepromWriteChunk(address_hi, start_address_lo, 127, data, silent);
+        EepromWriteChunk(address_hi, 128, end_address_lo, data, silent);
+        return;
+    }
+    printf("\r\nWriting data 0x%02x from bytes 0x%02x to 0x%02x with upper address 0x%02x", data, start_address_lo, end_address_lo, address_hi);
+    if (address_hi & 0x8000)
+        I2CWrite_opt(0xA8, 0x90, silent);
+    else
+        I2CWrite_opt(0xA0, 0x90, silent);
+    I2CWrite_opt(address_hi, 0x10, silent);
+    I2CWrite_opt(address_lo, 0x10, silent);
+    while (address_lo < end_address_lo) {
+        I2CWrite_opt(data, 0x10, silent);
+        address_lo++;
+    }
+    I2CWrite_opt(data, 0x50, silent);
+}
+
+void TestI2CEepromWrite128()
+{
+    unsigned char user_data;
+    unsigned char user_address_hi;
+    I2CInit();
+    printf("\r\nTesting filling 128-byte EEPROM chunk with byte");
+    printf("\r\nEnter high byte of address to write to: 0x");
+    user_address_hi = Get2HexDigits(0);
+    printf("\r\nEnter byte to fill range with: 0x");
+    user_data = Get2HexDigits(0);
+    EepromWriteChunk(user_address_hi, 0, 0xFF, user_data, 'N');
+    printf("\r\n128-byte write complete");
 }
 
 void MemoryTest(void)
